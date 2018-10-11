@@ -10,8 +10,12 @@
 #include "app.h"
 #include "timer.h"
 
-#define SYSTICK_ISR_OFF     SysTick->CTRL  &= ~SysTick_CTRL_TICKINT_Msk
-#define SYSTICK_ISR_ON      SysTick->CTRL  |= SysTick_CTRL_TICKINT_Msk
+#define APP_SYSTICK_ISR_OFF     SysTick->CTRL  &= ~SysTick_CTRL_TICKINT_Msk  // vypnout preruseni od Systick
+#define APP_SYSTICK_ISR_ON      SysTick->CTRL  |= SysTick_CTRL_TICKINT_Msk   // zapnout preruseni od Systick
+
+#define APP_KEY_HOUR           1 << 0
+#define APP_KEY_MIN            1 << 1
+#define APP_KEY_DEBOUNCING     20
 
 #define SUPPLY24_PORT      GPIOB
 #define SUPPLY24_PIN       GPIO_Pin_12
@@ -40,10 +44,17 @@
 #define BOARD_LED_PORT     GPIOC
 #define BOARD_LED_PIN      GPIO_Pin_13
 
-#define WEAKUP_POWER_S           1
-#define WEAKUP_BAT_S            60
-#define IMPULSE_LENGTH_MS       500
+#define LED_ON             LED_PORT->BRR = LED_PIN
+#define LED_OFF            LED_PORT->BSRR = LED_PIN
 
+#define SUPPLY24_ON        SUPPLY24_PORT->BRR = SUPPLY24_PIN
+#define SUPPLY24_OFF       SUPPLY24_PORT->BSRR = SUPPLY24_PIN
+
+#define APP_WEAKUP_POWER_S           1
+#define APP_WEAKUP_BAT_S            60
+
+#define APP_DELAY_24V_MS            50     // cekani na nabehnuti zdroje 24V
+#define APP_IMPULSE_LENGTH_MS      500     // delka impulsu
 
 
 typedef enum
@@ -52,10 +63,12 @@ typedef enum
   mode_bat,
 } mode_t;
 
-bool     g_bLastMinutePosition = false;
+bool     g_bAnchorPosition = false;
 mode_t   g_eMode;
 uint8_t  g_nSeconds = 0;
 uint32_t g_nImpulseStack = 0;
+
+uint8_t  g_nKey;
 
 void App_Init(void)
 {
@@ -105,7 +118,7 @@ void App_Init(void)
   App_BoardLed(true);
 
   RTCF1_Init();
-  Timer_SetSysTickCallback(App_SystickCallback);
+  Timer_SetSysTickCallback(App_SystickCallbackINT);
 
   RTCF1_SetWakeUp(5);
 
@@ -117,16 +130,16 @@ void App_Init(void)
 //  NVIC_EnableIRQ(EXTI9_5_IRQn);
 
 
-//  if (GPIO_ReadInputDataBit(SUPPLY_PORT, SUPPLY_PIN))
-//  {
+  if (SUPPLY_PORT->IDR & SUPPLY_PIN)
+  {
 //    g_eMode = mode_power;
 //    RTCF1_SetWakeUp(WEAKUP_POWER_S);
-//  }
-//  else
-//  {
+  }
+  else
+  {
 //    g_eMode = mode_bat;
 //    RTCF1_SetWakeUp(WEAKUP_BAT_S);
-//  }
+  }
 
 }
 
@@ -135,17 +148,33 @@ void App_Exec(void)
   App_BoardLed(true);
   Timer_Delay_ms(500);
   App_BoardLed(false);
-  APP_SetStopmode();
+  APP_SetStopMode();
   return;
 
   if (g_eMode == mode_power)
   {
-    if (g_nImpulseStack)  // je neco v zasobniku impulsu?
+    // cisteni zasobniku impulsu
+    // pokud neni impuls v zaspobniku, reagujeme na tlacitka
+    if (g_nImpulseStack)
     {
       App_MinuteImpulse();
       g_nImpulseStack--;
     }
+    else
+    {
+      // pridat minutovy impuls
+      if (g_nKey & APP_KEY_MIN)
+      {
+        g_nImpulseStack--;
+      }
+      else if (g_nKey & APP_KEY_HOUR)
+      {
+        // pridat 60 minutovych impulsu
+        g_nImpulseStack += 60;
+      }
+    }
 
+    // kontrola uplynuti sekundy
     if (!(RTC->CRL & RTC_CRL_SECF))
     {
       return;
@@ -158,7 +187,7 @@ void App_Exec(void)
     if (g_nSeconds >= 60)
     {
       g_nSeconds = 0;
-      if (GPIO_ReadInputDataBit(SUPPLY_PORT, SUPPLY_PIN))
+      if (SUPPLY_PORT->IDR & SUPPLY_PIN)
       {
         App_MinuteImpulse();
       }
@@ -166,24 +195,20 @@ void App_Exec(void)
       {
         // ztrata napajeni, prejit do BAT modu
         g_eMode = mode_bat;
-        RTCF1_SetWakeUp(WEAKUP_BAT_S);
-        NVIC_EnableIRQ(RTC_IRQn);
+        RTCF1_SetWakeUp(APP_WEAKUP_BAT_S);
       }
     }
-
   }
-
-//  if (g_eMode == mode_bat)
-//  {
-//    g_nImpulseStack++;
-//    APP_SetLPmode(false);
-//  }
 
 }
 
 void App_MinuteImpulse()
 {
-  if (g_bLastMinutePosition)
+  // zapnout zdroj 24V
+  SUPPLY24_ON;
+  Timer_Delay_ms(APP_DELAY_24V_MS);
+
+  if (g_bAnchorPosition)
   {
     GPIO_SetBits(IN1_PORT, IN1_PIN);
     GPIO_ResetBits(IN2_PORT, IN2_PIN);
@@ -194,11 +219,13 @@ void App_MinuteImpulse()
     GPIO_SetBits(IN2_PORT, IN2_PIN);
   }
 
+  // impuls do civky
   GPIO_SetBits(EN_PORT, EN_PIN);
-  Timer_Delay_ms(IMPULSE_LENGTH_MS);
+  Timer_Delay_ms(APP_IMPULSE_LENGTH_MS);
   GPIO_ResetBits(EN_PORT, EN_PIN);
 
-  g_bLastMinutePosition = !g_bLastMinutePosition;
+  g_bAnchorPosition = !g_bAnchorPosition;
+  SUPPLY24_OFF;
 }
 
 void App_BoardLed(bool bEnable)
@@ -216,22 +243,49 @@ void App_BoardLed(bool bEnable)
 
 // STOP mode continues after 'wfi' instruction
 // STANDBY mode continues from RESET vector and RAM is erased
-void APP_SetStopmode()
+void APP_SetStopMode()
 {
   /* Wichtig! Löschen der Pending IRQ Flags */
   EXTI->PR = 0xFFFFFFFF;
   PWR_ClearFlag(PWR_FLAG_WU);
-  SYSTICK_ISR_OFF;
+  APP_SYSTICK_ISR_OFF;
 
   PWR_EnterSTOPMode(PWR_Regulator_LowPower, PWR_STOPEntry_WFI);
 
-  SYSTICK_ISR_ON;
+  APP_SYSTICK_ISR_ON;
 //  SystemInit(); // po probuzeni jsou hodiny vynulovany (PLL  a delicky)
 }
 
-void App_SystickCallback(void)
+void App_SystickCallbackINT(void)
 {
-  // kontrola tlacitek
+  static uint8_t nKeyCounter = 0;
+  static uint8_t g_nLastKeys;
+
+  // snimani stavu tlacitek
+  uint32_t nKeys = 0;
+  if (HOUR_PORT->IDR & HOUR_PIN)
+  {
+    nKeys |= APP_KEY_HOUR;
+  }
+
+  if (MIN_PORT->IDR & MIN_PIN)
+  {
+    nKeys |= APP_KEY_MIN;
+  }
+
+  if (nKeys == g_nLastKeys)
+  {
+    nKeyCounter++;
+    if (nKeyCounter > APP_KEY_DEBOUNCING)
+    {
+      nKeyCounter = APP_KEY_DEBOUNCING;
+      g_nKey = nKeys;
+    }
+  }
+  else
+  {
+    nKeyCounter = 0;
+  }
 }
 
 void EXTI4_15_IRQHandler(void)
