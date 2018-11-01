@@ -254,6 +254,8 @@ void APP_SetStopMode()
 
   APP_SYSTICK_ISR_ON;
 //  SystemInit(); // po probuzeni jsou hodiny vynulovany (PLL  a delicky)
+
+  g_nImpulseStack++;
 }
 
 void App_SystickCallbackINT(void)
@@ -290,17 +292,23 @@ void App_SystickCallbackINT(void)
 
 void EXTI4_15_IRQHandler(void)
 {
-//  // EXTI line interrupt detected
-//  if (EXTI->PR & SUPPLY_PIN)
-//  {
-//    EXTI->PR = SUPPLY_PIN; // Clear interrupt flag
-//
-//    NVIC_DisableIRQ(RTC_IRQn);
-//
-//    // precist zbytkovy cas RTC->WUTR a nastavit podle neho sekundy
-//    uint32_t nWutr = RTC->WUTR;
-//    g_nSeconds = 59 - nWutr;
-//    g_eMode = mode_power;
-//    RTCF1_SetWakeUp(WEAKUP_POWER_S);
-//  }
+  /*
+  // EXTI line interrupt detected
+  if (EXTI->PR & SUPPLY_PIN)
+  {
+    EXTI->PR = SUPPLY_PIN; // Clear interrupt flag
+
+    NVIC_DisableIRQ(RTC_IRQn);
+
+    // precist zbytkovy cas RTC->WUTR a nastavit podle neho sekundy
+    uint32_t nWutr = RTC->WUTR;
+    g_nSeconds = 59 - nWutr;
+    g_eMode = mode_power;
+    RTCF1_SetWakeUp(WEAKUP_POWER_S);
+
+    Todo: prepocitat impulsy v zasobniku na %den (60 minut * 24 hodin)
+    g_nImpulseStack = g_nImpulseStack % (60 * 24);
+  }
+  */
+
 }
