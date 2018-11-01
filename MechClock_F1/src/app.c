@@ -17,30 +17,39 @@
 #define APP_KEY_MIN            1 << 1
 #define APP_KEY_DEBOUNCING     20
 
+// spinani 5V ke zdroji 24V
 #define SUPPLY24_PORT      GPIOB
-#define SUPPLY24_PIN       GPIO_Pin_12
+#define SUPPLY24_PIN       GPIO_Pin_13
 
-#define EN_PORT            GPIOB
-#define EN_PIN             GPIO_Pin_13
+// EN pin L268
+#define EN_PORT            GPIOA
+#define EN_PIN             GPIO_Pin_1
 
-#define IN1_PORT           GPIOB
-#define IN1_PIN            GPIO_Pin_14
+// IN1 pin L268
+#define IN1_PORT           GPIOA
+#define IN1_PIN            GPIO_Pin_3
 
-#define IN2_PORT           GPIOB
-#define IN2_PIN            GPIO_Pin_15
+// IN2 pin L268
+#define IN2_PORT           GPIOA
+#define IN2_PIN            GPIO_Pin_2
 
+// externi LED (blikani 1s)
 #define LED_PORT           GPIOB
 #define LED_PIN            GPIO_Pin_6
 
+// tlacitko HODINY
 #define HOUR_PORT          GPIOA
-#define HOUR_PIN           GPIO_Pin_3
+#define HOUR_PIN           GPIO_Pin_5
 
+// tlacitko MINUTY
 #define MIN_PORT           GPIOA
 #define MIN_PIN            GPIO_Pin_4
 
+// vstup ADC pro mereni napajeni 5V
 #define SUPPLY_PORT        GPIOA
-#define SUPPLY_PIN         GPIO_Pin_2
+#define SUPPLY_PIN         GPIO_Pin_7
 
+// BLUE LED na kitu
 #define BOARD_LED_PORT     GPIOC
 #define BOARD_LED_PIN      GPIO_Pin_13
 
@@ -83,8 +92,6 @@ void App_Init(void)
   // configure output pins
   GPIO_InitStruct.GPIO_Pin   = EN_PIN;
   GPIO_InitStruct.GPIO_Mode  = GPIO_Mode_Out_PP;
-//  GPIO_InitStruct.GPIO_Mode  = GPIO_Mode_AIN;
-
   GPIO_InitStruct.GPIO_Speed = GPIO_Speed_2MHz;
   GPIO_Init(EN_PORT, &GPIO_InitStruct);
 
@@ -96,6 +103,9 @@ void App_Init(void)
 
   GPIO_InitStruct.GPIO_Pin = LED_PIN;
   GPIO_Init(LED_PORT, &GPIO_InitStruct);
+
+  GPIO_InitStruct.GPIO_Pin = SUPPLY24_PIN;
+  GPIO_Init(SUPPLY24_PORT, &GPIO_InitStruct);
 
   GPIO_InitStruct.GPIO_Pin = BOARD_LED_PIN;
   GPIO_Init(BOARD_LED_PORT, &GPIO_InitStruct);
@@ -115,12 +125,20 @@ void App_Init(void)
 
   GPIO_ResetBits(EN_PORT, EN_PIN);
 
+  App_MinuteImpulse();
+  App_MinuteImpulse();
+  App_MinuteImpulse();
+  App_MinuteImpulse();
+  App_MinuteImpulse();
+  App_MinuteImpulse();
+
+
   App_BoardLed(true);
 
   RTCF1_Init();
   Timer_SetSysTickCallback(App_SystickCallbackINT);
 
-  RTCF1_SetWakeUp(5);
+//  RTCF1_SetWakeUp(5);
 
 //  // EXTI configuration for RTC wakeup line
 //  EXTI->IMR |= SUPPLY_PIN; // Configure the corresponding mask bit in the EXTI_IMR register
@@ -194,8 +212,9 @@ void App_Exec(void)
       else
       {
         // ztrata napajeni, prejit do BAT modu
-        g_eMode = mode_bat;
-        RTCF1_SetWakeUp(APP_WEAKUP_BAT_S);
+//        g_eMode = mode_bat;
+//        RTCF1_SetWakeUp(WEAKUP_BAT_S);
+//        NVIC_EnableIRQ(RTC_IRQn);
       }
     }
   }
@@ -220,11 +239,14 @@ void App_MinuteImpulse()
   }
 
   // impuls do civky
+
+  Timer_Delay_ms(10);
   GPIO_SetBits(EN_PORT, EN_PIN);
   Timer_Delay_ms(APP_IMPULSE_LENGTH_MS);
   GPIO_ResetBits(EN_PORT, EN_PIN);
 
   g_bAnchorPosition = !g_bAnchorPosition;
+
   SUPPLY24_OFF;
 }
 
