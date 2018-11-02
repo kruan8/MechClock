@@ -13,9 +13,7 @@
 #define APP_SYSTICK_ISR_OFF     SysTick->CTRL  &= ~SysTick_CTRL_TICKINT_Msk  // vypnout preruseni od Systick
 #define APP_SYSTICK_ISR_ON      SysTick->CTRL  |= SysTick_CTRL_TICKINT_Msk   // zapnout preruseni od Systick
 
-#define APP_KEY_HOUR           1 << 0
-#define APP_KEY_MIN            1 << 1
-#define APP_KEY_DEBOUNCING     20
+// OUTPUTS definition
 
 // spinani 5V ke zdroji 24V
 #define SUPPLY24_PORT      GPIOB
@@ -33,31 +31,48 @@
 #define IN2_PORT           GPIOA
 #define IN2_PIN            GPIO_Pin_2
 
-// externi LED (blikani 1s)
+// externi LED (blink 1s)
 #define LED_PORT           GPIOB
 #define LED_PIN            GPIO_Pin_6
-
-// tlacitko HODINY
-#define HOUR_PORT          GPIOA
-#define HOUR_PIN           GPIO_Pin_5
-
-// tlacitko MINUTY
-#define MIN_PORT           GPIOA
-#define MIN_PIN            GPIO_Pin_4
-
-// vstup ADC pro mereni napajeni 5V
-#define SUPPLY_PORT        GPIOA
-#define SUPPLY_PIN         GPIO_Pin_7
 
 // BLUE LED na kitu
 #define BOARD_LED_PORT     GPIOC
 #define BOARD_LED_PIN      GPIO_Pin_13
 
+
+// INPUTS definition
+
+// tlacitko HODINY
+#define KEY_HOUR_PORT      GPIOA
+#define KEY_HOUR_PIN       GPIO_Pin_5
+
+// tlacitko MINUTY
+#define KEY_IN_PORT        GPIOA
+#define KEY_MIN_PIN        GPIO_Pin_4
+
+// vstup ADC pro mereni napajeni 5V
+#define SUPPLY_PORT        GPIOA
+#define SUPPLY_PIN         GPIO_Pin_7
+
+
+// port control
 #define LED_ON             LED_PORT->BRR = LED_PIN
 #define LED_OFF            LED_PORT->BSRR = LED_PIN
 
-#define SUPPLY24_ON        SUPPLY24_PORT->BRR = SUPPLY24_PIN
-#define SUPPLY24_OFF       SUPPLY24_PORT->BSRR = SUPPLY24_PIN
+#define SUPPLY24_ON        SUPPLY24_PORT->BSRR = SUPPLY24_PIN
+#define SUPPLY24_OFF       SUPPLY24_PORT->BRR = SUPPLY24_PIN
+
+#define IMPULSE_ON         EN_PORT->BSRR = EN_PIN
+#define IMPULSE_OFF        EN_PORT->BRR = EN_PIN
+
+#define IN1_ON             IN1_PORT->BSRR = IN1_PIN
+#define IN1_OFF            IN1_PORT->BRR = IN1_PIN
+
+#define IN2_ON             IN2_PORT->BSRR = IN2_PIN
+#define IN2_OFF            IN2_PORT->BRR = IN2_PIN
+
+#define BOARD_LED_ON       BOARD_LED_PORT->BSRR = BOARD_LED_PIN
+#define BOARD_LED_OFF      BOARD_LED_PORT->BRR = BOARD_LED_PIN
 
 #define APP_WEAKUP_POWER_S           1
 #define APP_WEAKUP_BAT_S            60
@@ -65,6 +80,10 @@
 #define APP_DELAY_24V_MS            50     // cekani na nabehnuti zdroje 24V
 #define APP_IMPULSE_LENGTH_MS      500     // delka impulsu
 
+// keys
+#define APP_KEY_HOUR           1 << 0
+#define APP_KEY_MIN            1 << 1
+#define APP_KEY_DEBOUNCING     20
 
 typedef enum
 {
@@ -113,27 +132,20 @@ void App_Init(void)
   // configure input pins
   GPIO_InitStruct.GPIO_Mode = GPIO_Mode_IPU;
 
-  GPIO_InitStruct.GPIO_Pin = HOUR_PIN;
-  GPIO_Init(HOUR_PORT, &GPIO_InitStruct);
+  GPIO_InitStruct.GPIO_Pin = KEY_HOUR_PIN;
+  GPIO_Init(KEY_HOUR_PORT, &GPIO_InitStruct);
 
-  GPIO_InitStruct.GPIO_Pin = MIN_PIN;
-  GPIO_Init(MIN_PORT, &GPIO_InitStruct);
+  GPIO_InitStruct.GPIO_Pin = KEY_MIN_PIN;
+  GPIO_Init(KEY_IN_PORT, &GPIO_InitStruct);
 
   GPIO_InitStruct.GPIO_Pin = SUPPLY_PIN;
   GPIO_InitStruct.GPIO_Mode = GPIO_Mode_IN_FLOATING;
   GPIO_Init(SUPPLY_PORT, &GPIO_InitStruct);
 
-  GPIO_ResetBits(EN_PORT, EN_PIN);
+  IMPULSE_OFF;
 
-  App_MinuteImpulse();
-  App_MinuteImpulse();
-  App_MinuteImpulse();
-  App_MinuteImpulse();
-  App_MinuteImpulse();
-  App_MinuteImpulse();
-
-
-  App_BoardLed(true);
+  // Todo: funguje to vubec?
+  BOARD_LED_ON;
 
   RTCF1_Init();
   Timer_SetSysTickCallback(App_SystickCallbackINT);
@@ -159,45 +171,46 @@ void App_Init(void)
 //    RTCF1_SetWakeUp(WEAKUP_BAT_S);
   }
 
+  g_eMode = mode_power;
+  g_nImpulseStack += 10;
+
 }
 
 void App_Exec(void)
 {
-  App_BoardLed(true);
-  Timer_Delay_ms(500);
-  App_BoardLed(false);
-  APP_SetStopMode();
-  return;
-
-  if (g_eMode == mode_power)
+  // v BAT modu prejit do STOP modu a pak pridat impulz
+  if (g_eMode == mode_bat)
   {
-    // cisteni zasobniku impulsu
-    // pokud neni impuls v zaspobniku, reagujeme na tlacitka
-    if (g_nImpulseStack)
+    APP_SetStopMode();
+    g_nImpulseStack++;
+    return;
+  }
+
+  // cisteni zasobniku impulsu
+  // pokud neni impuls v zaspobniku, reagujeme na tlacitka
+  if (g_nImpulseStack)
+  {
+    App_MinuteImpulse();
+    g_nImpulseStack--;
+  }
+  else
+  {
+    // obsluha tlacitek
+    // pridat minutovy impuls
+    if (g_nKey & APP_KEY_MIN)
     {
-      App_MinuteImpulse();
       g_nImpulseStack--;
     }
-    else
+    else if (g_nKey & APP_KEY_HOUR)
     {
-      // pridat minutovy impuls
-      if (g_nKey & APP_KEY_MIN)
-      {
-        g_nImpulseStack--;
-      }
-      else if (g_nKey & APP_KEY_HOUR)
-      {
-        // pridat 60 minutovych impulsu
-        g_nImpulseStack += 60;
-      }
+      // pridat 60 minutovych impulsu
+      g_nImpulseStack += 60;
     }
+  }
 
-    // kontrola uplynuti sekundy
-    if (!(RTC->CRL & RTC_CRL_SECF))
-    {
-      return;
-    }
-
+  // kontrola uplynuti sekundy
+  if (RTC->CRL & RTC_CRL_SECF)
+  {
     // clear SEC flag
     RTC->CRL &= ~RTC_CRL_SECF;
 
@@ -205,18 +218,17 @@ void App_Exec(void)
     if (g_nSeconds >= 60)
     {
       g_nSeconds = 0;
-      if (SUPPLY_PORT->IDR & SUPPLY_PIN)
-      {
-        App_MinuteImpulse();
-      }
-      else
-      {
-        // ztrata napajeni, prejit do BAT modu
-//        g_eMode = mode_bat;
-//        RTCF1_SetWakeUp(WEAKUP_BAT_S);
-//        NVIC_EnableIRQ(RTC_IRQn);
-      }
+      g_nImpulseStack++;
     }
+  }
+
+  // pokud je ztrata napajeni, prejit do BAT modu
+  if (!(SUPPLY_PORT->IDR & SUPPLY_PIN))
+  {
+    // Todo: debouncing, neni kam spechat
+    //  g_eMode = mode_bat;
+    //  RTCF1_SetWakeUp(WEAKUP_BAT_S);
+    //  NVIC_EnableIRQ(RTC_IRQn);
   }
 
 }
@@ -225,40 +237,34 @@ void App_MinuteImpulse()
 {
   // zapnout zdroj 24V
   SUPPLY24_ON;
+
+  // wait for supply startup
   Timer_Delay_ms(APP_DELAY_24V_MS);
 
   if (g_bAnchorPosition)
   {
-    GPIO_SetBits(IN1_PORT, IN1_PIN);
-    GPIO_ResetBits(IN2_PORT, IN2_PIN);
+    IN1_ON;
+    IN2_OFF;
   }
   else
   {
-    GPIO_ResetBits(IN1_PORT, IN1_PIN);
-    GPIO_SetBits(IN2_PORT, IN2_PIN);
+    IN1_OFF;
+    IN2_ON;
   }
 
-  // impuls do civky
-
-  Timer_Delay_ms(10);
-  GPIO_SetBits(EN_PORT, EN_PIN);
+  // impuls do civky + LED bliknuti
+  IMPULSE_ON;
+  LED_ON;
   Timer_Delay_ms(APP_IMPULSE_LENGTH_MS);
-  GPIO_ResetBits(EN_PORT, EN_PIN);
+  LED_OFF;
+  IMPULSE_OFF;
 
   g_bAnchorPosition = !g_bAnchorPosition;
 
-  SUPPLY24_OFF;
-}
-
-void App_BoardLed(bool bEnable)
-{
-  if (bEnable)
+  // pokud je v zasobniku impuls, nevypinat napajeni zdroje 24V (vykonnova zatez spinace)
+  if (!g_nImpulseStack)
   {
-    GPIO_ResetBits(BOARD_LED_PORT, BOARD_LED_PIN);
-  }
-  else
-  {
-    GPIO_SetBits(BOARD_LED_PORT, BOARD_LED_PIN);
+    SUPPLY24_OFF;
   }
 
 }
@@ -275,9 +281,8 @@ void APP_SetStopMode()
   PWR_EnterSTOPMode(PWR_Regulator_LowPower, PWR_STOPEntry_WFI);
 
   APP_SYSTICK_ISR_ON;
-//  SystemInit(); // po probuzeni jsou hodiny vynulovany (PLL  a delicky)
+//  SystemInit(); // po probuzeni jsou hodiny vynulovany (PLL  a delicky) - jak na to prisli???
 
-  g_nImpulseStack++;
 }
 
 void App_SystickCallbackINT(void)
@@ -287,12 +292,12 @@ void App_SystickCallbackINT(void)
 
   // snimani stavu tlacitek
   uint32_t nKeys = 0;
-  if (HOUR_PORT->IDR & HOUR_PIN)
+  if (KEY_HOUR_PORT->IDR & KEY_HOUR_PIN)
   {
     nKeys |= APP_KEY_HOUR;
   }
 
-  if (MIN_PORT->IDR & MIN_PIN)
+  if (KEY_IN_PORT->IDR & KEY_MIN_PIN)
   {
     nKeys |= APP_KEY_MIN;
   }

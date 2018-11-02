@@ -17,6 +17,4 @@ void App_MinuteImpulse();
 void App_SystickCallbackINT(void);
 void APP_SetStopMode();
 
-void App_BoardLed(bool bEnable);
-
 #endif /* APP_H_ */
