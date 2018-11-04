@@ -60,6 +60,7 @@ void RTCF1_Init(void)
   // Nastavime typ alarmu
 //  RTC->CRH |= RTC_IT_SEC; // Preruseni po 1 sek
   while ((RTC->CRL & RTC_FLAG_RTOFF) == RESET); // Pockame na dokonceni zapisu
+
   PWR->CR &= ~PWR_CR_DBP; // zakaz pristupu do BKP registru
 }
 

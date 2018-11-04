@@ -20,9 +20,9 @@ int main(void)
 
   App_Init();
 
-  RTCF1_Test();
+//  RTCF1_Test();
 
-  Timer_Delay_ms(1500);
+  Timer_Delay_ms(1000);
   while (1)
   {
     App_Exec();

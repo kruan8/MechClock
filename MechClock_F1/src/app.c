@@ -43,16 +43,16 @@
 // INPUTS definition
 
 // tlacitko HODINY
-#define KEY_HOUR_PORT      GPIOA
-#define KEY_HOUR_PIN       GPIO_Pin_5
+#define KEY_HOUR_PORT      GPIOB
+#define KEY_HOUR_PIN       GPIO_Pin_8
 
 // tlacitko MINUTY
-#define KEY_IN_PORT        GPIOA
-#define KEY_MIN_PIN        GPIO_Pin_4
+#define KEY_MIN_PORT       GPIOB
+#define KEY_MIN_PIN        GPIO_Pin_9
 
 // vstup ADC pro mereni napajeni 5V
-#define SUPPLY_PORT        GPIOA
-#define SUPPLY_PIN         GPIO_Pin_7
+#define SUPPLY_PORT        GPIOB
+#define SUPPLY_PIN         GPIO_Pin_11
 
 
 // port control
@@ -71,8 +71,8 @@
 #define IN2_ON             IN2_PORT->BSRR = IN2_PIN
 #define IN2_OFF            IN2_PORT->BRR = IN2_PIN
 
-#define BOARD_LED_ON       BOARD_LED_PORT->BSRR = BOARD_LED_PIN
-#define BOARD_LED_OFF      BOARD_LED_PORT->BRR = BOARD_LED_PIN
+#define BOARD_LED_ON       BOARD_LED_PORT->BRR = BOARD_LED_PIN
+#define BOARD_LED_OFF      BOARD_LED_PORT->BSRR = BOARD_LED_PIN
 
 #define APP_WEAKUP_POWER_S           1
 #define APP_WEAKUP_BAT_S            60
@@ -84,6 +84,8 @@
 #define APP_KEY_HOUR           1 << 0
 #define APP_KEY_MIN            1 << 1
 #define APP_KEY_DEBOUNCING     20
+
+#define APP_SUPPLY_DEBOUNCING    100
 
 typedef enum
 {
@@ -97,6 +99,7 @@ uint8_t  g_nSeconds = 0;
 uint32_t g_nImpulseStack = 0;
 
 uint8_t  g_nKey;
+uint8_t  g_nSupplyDeb = 0;
 
 void App_Init(void)
 {
@@ -136,16 +139,15 @@ void App_Init(void)
   GPIO_Init(KEY_HOUR_PORT, &GPIO_InitStruct);
 
   GPIO_InitStruct.GPIO_Pin = KEY_MIN_PIN;
-  GPIO_Init(KEY_IN_PORT, &GPIO_InitStruct);
+  GPIO_Init(KEY_MIN_PORT, &GPIO_InitStruct);
 
   GPIO_InitStruct.GPIO_Pin = SUPPLY_PIN;
-  GPIO_InitStruct.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+//  GPIO_InitStruct.GPIO_Mode = GPIO_Mode_IN_FLOATING;
   GPIO_Init(SUPPLY_PORT, &GPIO_InitStruct);
 
   IMPULSE_OFF;
 
-  // Todo: funguje to vubec?
-  BOARD_LED_ON;
+  BOARD_LED_OFF;
 
   RTCF1_Init();
   Timer_SetSysTickCallback(App_SystickCallbackINT);
@@ -159,21 +161,10 @@ void App_Init(void)
 //  NVIC_SetPriority(EXTI9_5_IRQn, 2);
 //  NVIC_EnableIRQ(EXTI9_5_IRQn);
 
-
-  if (SUPPLY_PORT->IDR & SUPPLY_PIN)
-  {
-//    g_eMode = mode_power;
-//    RTCF1_SetWakeUp(WEAKUP_POWER_S);
-  }
-  else
-  {
-//    g_eMode = mode_bat;
-//    RTCF1_SetWakeUp(WEAKUP_BAT_S);
-  }
-
   g_eMode = mode_power;
-  g_nImpulseStack += 10;
 
+  // Todo: spustit watchdog
+  // Todo: ukladat sekundy, abychom o ne neprisli pri resetu
 }
 
 void App_Exec(void)
@@ -184,6 +175,25 @@ void App_Exec(void)
     APP_SetStopMode();
     g_nImpulseStack++;
     return;
+  }
+
+  // pokud je ztrata napajeni, prejit do BAT modu
+  if (!(SUPPLY_PORT->IDR & SUPPLY_PIN))
+  {
+    // debouncing napajeni
+    g_nSupplyDeb++;
+    if (g_nSupplyDeb > APP_SUPPLY_DEBOUNCING)
+    {
+      g_nSupplyDeb = 0;
+      g_eMode = mode_bat;
+
+      //  RTCF1_SetWakeUp(WEAKUP_BAT_S);
+      //  NVIC_EnableIRQ(RTC_IRQn);
+    }
+  }
+  else
+  {
+    g_nSupplyDeb = 0;
   }
 
   // cisteni zasobniku impulsu
@@ -199,7 +209,7 @@ void App_Exec(void)
     // pridat minutovy impuls
     if (g_nKey & APP_KEY_MIN)
     {
-      g_nImpulseStack--;
+      g_nImpulseStack++;
     }
     else if (g_nKey & APP_KEY_HOUR)
     {
@@ -212,6 +222,7 @@ void App_Exec(void)
   if (RTC->CRL & RTC_CRL_SECF)
   {
     // clear SEC flag
+    while ((RTC->CRL & RTC_FLAG_RTOFF) == RESET);
     RTC->CRL &= ~RTC_CRL_SECF;
 
     g_nSeconds++;
@@ -220,15 +231,6 @@ void App_Exec(void)
       g_nSeconds = 0;
       g_nImpulseStack++;
     }
-  }
-
-  // pokud je ztrata napajeni, prejit do BAT modu
-  if (!(SUPPLY_PORT->IDR & SUPPLY_PIN))
-  {
-    // Todo: debouncing, neni kam spechat
-    //  g_eMode = mode_bat;
-    //  RTCF1_SetWakeUp(WEAKUP_BAT_S);
-    //  NVIC_EnableIRQ(RTC_IRQn);
   }
 
 }
@@ -288,21 +290,21 @@ void APP_SetStopMode()
 void App_SystickCallbackINT(void)
 {
   static uint8_t nKeyCounter = 0;
-  static uint8_t g_nLastKeys;
+  static uint8_t nLastKeys;
 
   // snimani stavu tlacitek
   uint32_t nKeys = 0;
-  if (KEY_HOUR_PORT->IDR & KEY_HOUR_PIN)
+  if (!(KEY_HOUR_PORT->IDR & KEY_HOUR_PIN))
   {
     nKeys |= APP_KEY_HOUR;
   }
 
-  if (KEY_IN_PORT->IDR & KEY_MIN_PIN)
+  if (!(KEY_MIN_PORT->IDR & KEY_MIN_PIN))
   {
     nKeys |= APP_KEY_MIN;
   }
 
-  if (nKeys == g_nLastKeys)
+  if (nKeys == nLastKeys)
   {
     nKeyCounter++;
     if (nKeyCounter > APP_KEY_DEBOUNCING)
@@ -315,6 +317,8 @@ void App_SystickCallbackINT(void)
   {
     nKeyCounter = 0;
   }
+
+  nLastKeys = nKeys;
 }
 
 void EXTI4_15_IRQHandler(void)
