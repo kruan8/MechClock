@@ -142,7 +142,7 @@ void App_Init(void)
   GPIO_Init(KEY_MIN_PORT, &GPIO_InitStruct);
 
   GPIO_InitStruct.GPIO_Pin = SUPPLY_PIN;
-//  GPIO_InitStruct.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+  GPIO_InitStruct.GPIO_Mode = GPIO_Mode_IN_FLOATING;
   GPIO_Init(SUPPLY_PORT, &GPIO_InitStruct);
 
   IMPULSE_OFF;
@@ -154,12 +154,11 @@ void App_Init(void)
 
 //  RTCF1_SetWakeUp(5);
 
-//  // EXTI configuration for RTC wakeup line
-//  EXTI->IMR |= SUPPLY_PIN; // Configure the corresponding mask bit in the EXTI_IMR register
-//  EXTI->RTSR |= SUPPLY_PIN; // Configure the Trigger Selection bits of the Interrupt line (rising edge)
-//
-//  NVIC_SetPriority(EXTI9_5_IRQn, 2);
-//  NVIC_EnableIRQ(EXTI9_5_IRQn);
+  // EXTI configuration for RTC wakeup line
+  EXTI->RTSR |= SUPPLY_PIN; // rising edge
+  EXTI->PR |= SUPPLY_PIN;   // pending reset
+  NVIC_SetPriority(EXTI15_10_IRQn, 5);
+  NVIC_EnableIRQ(EXTI15_10_IRQn);
 
   g_eMode = mode_power;
 
@@ -186,9 +185,9 @@ void App_Exec(void)
     {
       g_nSupplyDeb = 0;
       g_eMode = mode_bat;
-
-      //  RTCF1_SetWakeUp(WEAKUP_BAT_S);
-      //  NVIC_EnableIRQ(RTC_IRQn);
+      RTCF1_SetWakeUp(APP_WEAKUP_BAT_S - g_nSeconds);
+      EXTI->IMR |= SUPPLY_PIN;  // INT enable
+      return;
     }
   }
   else
@@ -321,25 +320,23 @@ void App_SystickCallbackINT(void)
   nLastKeys = nKeys;
 }
 
-void EXTI4_15_IRQHandler(void)
+void EXTI15_10_IRQHandler(void)
 {
-  /*
   // EXTI line interrupt detected
   if (EXTI->PR & SUPPLY_PIN)
   {
     EXTI->PR = SUPPLY_PIN; // Clear interrupt flag
+    EXTI->IMR &= ~SUPPLY_PIN;
 
-    NVIC_DisableIRQ(RTC_IRQn);
+    // disable wakeup
+    RTCF1_SetWakeUp(0);
 
-    // precist zbytkovy cas RTC->WUTR a nastavit podle neho sekundy
-    uint32_t nWutr = RTC->WUTR;
-    g_nSeconds = 59 - nWutr;
+    // nacist zbytkovy cas z RTC a nastavit podle neho sekundy
+    g_nSeconds = 59 - RTCF1_GetRemainingAlarm();
     g_eMode = mode_power;
-    RTCF1_SetWakeUp(WEAKUP_POWER_S);
 
-    Todo: prepocitat impulsy v zasobniku na %den (60 minut * 24 hodin)
+    // prepocitat impulsy v zasobniku na %den (60 minut * 24 hodin)
     g_nImpulseStack = g_nImpulseStack % (60 * 24);
   }
-  */
 
 }

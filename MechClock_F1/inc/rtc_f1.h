@@ -46,6 +46,7 @@ void RTCF1_Init(void);
 void RTCF1_Set(rtc_record_time_t *dt);
 void RTCF1_Get(rtc_record_time_t *dt);
 void RTCF1_SetWakeUp(uint16_t nInterval);
+uint32_t RTCF1_GetRemainingAlarm(void);
 
 void RTC_GetDT(rtc_time_t* time, rtc_date_t* date);
 

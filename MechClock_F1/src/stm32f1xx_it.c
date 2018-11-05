@@ -140,14 +140,7 @@ void PendSV_Handler(void)
 /*  file (startup_stm32f10x_md.s).                                            */
 /******************************************************************************/
 
-/**
-  * @brief  This function handles PPP interrupt request.
-  * @param  None
-  * @retval None
-  */
-/*void PPP_IRQHandler(void)
-{
-}*/
+
 
 /**
   * @}

@@ -89,13 +89,6 @@ void RTCF1_SetWakeUp(uint16_t nInterval_s)
   EXTI_InitStructure.EXTI_LineCmd = ENABLE;
   EXTI_Init(&EXTI_InitStructure);
 
-
-  /* Enable the RTC Alarm Interrupt */
-  NVIC_InitStructure.NVIC_IRQChannel = RTCAlarm_IRQn;
-  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 13;
-  NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-  NVIC_Init(&NVIC_InitStructure);
-
   /* Alarmperiode setzen */
   PWR_BackupAccessCmd(ENABLE);
   RTC_WaitForLastTask();
@@ -105,14 +98,21 @@ void RTCF1_SetWakeUp(uint16_t nInterval_s)
   RTC_WaitForLastTask();
 
   /* Int zulassen */
-  RTC_ITConfig(RTC_IT_ALR, ENABLE);
+  NVIC_SetPriority(RTCAlarm_IRQn, 13);
   NVIC_EnableIRQ(RTCAlarm_IRQn);
+  RTC_ITConfig(RTC_IT_ALR, ENABLE);
 
   PWR_BackupAccessCmd(DISABLE);
 
   g_nAlarmInterval = nInterval_s;
 }
 
+uint32_t RTCF1_GetRemainingAlarm(void)
+{
+  uint32_t nValue = (RTC->ALRH << 16) + RTC->ALRL;
+  nValue -= RTC_GetCounter();
+  return nValue;
+}
 
 void RTCF1_Set(rtc_record_time_t *dt)
 {
@@ -242,9 +242,9 @@ uint8_t RTCF1_Bcd2ToByte(uint8_t Value)
   return (tmp + (Value & (uint8_t)0x0F));
 }
 
-void RTCF1_IRQHandler(void)
+void RTC_IRQHandler(void)
 {
-  RTC->CRL &= ~RTC_CRL_SECF;
+//  RTC->CRL &= ~RTC_CRL_SECF;
 
 }
 
