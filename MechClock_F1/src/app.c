@@ -15,11 +15,11 @@
 
 // OUTPUTS definition
 
-// spinani 5V ke zdroji 24V
+// vykonnový spinac pro spinani 5V ke zdroji 24V
 #define SUPPLY24_PORT      GPIOB
 #define SUPPLY24_PIN       GPIO_Pin_13
 
-// EN pin L268
+// enable pin L268
 #define EN_PORT            GPIOA
 #define EN_PIN             GPIO_Pin_1
 
@@ -50,10 +50,11 @@
 #define KEY_MIN_PORT       GPIOB
 #define KEY_MIN_PIN        GPIO_Pin_9
 
-// vstup ADC pro mereni napajeni 5V
+// vstup pro detekci napajeni 5V (pripojen na odporovy delic)
 #define SUPPLY_PORT        GPIOB
-#define SUPPLY_PIN         GPIO_Pin_11
-
+#define SUPPLY_PIN         GPIO_Pin_10
+#define SUPPLY_PORT_SOURCE GPIO_PortSourceGPIOB
+#define SUPPLY_PIN_SOURCE  GPIO_PinSource10
 
 // port control
 #define LED_ON             LED_PORT->BRR = LED_PIN
@@ -74,15 +75,15 @@
 #define BOARD_LED_ON       BOARD_LED_PORT->BRR = BOARD_LED_PIN
 #define BOARD_LED_OFF      BOARD_LED_PORT->BSRR = BOARD_LED_PIN
 
-#define APP_WEAKUP_POWER_S           1
-#define APP_WEAKUP_BAT_S            60
+// intervals
+#define APP_WEAKUP_BAT_S            60     // wakeup interval from STOP mode
 
-#define APP_DELAY_24V_MS            50     // cekani na nabehnuti zdroje 24V
-#define APP_IMPULSE_LENGTH_MS      500     // delka impulsu
+#define APP_DELAY_24V_MS            50     // wait time for startup of supply 24V
+#define APP_IMPULSE_LENGTH_MS      500     // anchor impulse length
 
 // keys
-#define APP_KEY_HOUR           1 << 0
-#define APP_KEY_MIN            1 << 1
+#define APP_KEY_HOUR           1 << 0      // button HOUR mask
+#define APP_KEY_MIN            1 << 1      // button MIN mask
 #define APP_KEY_DEBOUNCING     20
 
 #define APP_SUPPLY_DEBOUNCING    100
@@ -93,13 +94,13 @@ typedef enum
   mode_bat,
 } mode_t;
 
-bool     g_bAnchorPosition = false;
-mode_t   g_eMode;
-uint8_t  g_nSeconds = 0;
-uint32_t g_nImpulseStack = 0;
+bool     g_bAnchorPosition = false;   // pozice kotvy v magnetu hodin (urcuje smer proudu)
+mode_t   g_eMode;                     // napajeci mod hodin (5V/BAT)
+uint8_t  g_nSeconds = 0;              // citac sekund
+uint32_t g_nImpulseStack = 0;         // zasobnik impulsu (nastaveni, BAT mode)
 
-uint8_t  g_nKey;
-uint8_t  g_nSupplyDeb = 0;
+uint8_t  g_nKey;                      // stiknute tlacitko
+uint8_t  g_nSupplyDeb = 0;            // debouncer napajeni
 
 void App_Init(void)
 {
@@ -107,7 +108,7 @@ void App_Init(void)
 
   RCC->APB1ENR |= RCC_APB1ENR_PWREN; // Enable PWR clock
 
-  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB | RCC_APB2Periph_GPIOC, ENABLE);
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB | RCC_APB2Periph_GPIOC | RCC_APB2Periph_AFIO, ENABLE);
 
   GPIO_InitTypeDef GPIO_InitStruct;
 
@@ -152,11 +153,11 @@ void App_Init(void)
   RTCF1_Init();
   Timer_SetSysTickCallback(App_SystickCallbackINT);
 
-//  RTCF1_SetWakeUp(5);
-
-  // EXTI configuration for RTC wakeup line
+  // EXTI configuration for supply wakeup line
+  GPIO_EXTILineConfig(SUPPLY_PORT_SOURCE, SUPPLY_PIN_SOURCE);  // EXTI mapping
   EXTI->RTSR |= SUPPLY_PIN; // rising edge
   EXTI->PR |= SUPPLY_PIN;   // pending reset
+
   NVIC_SetPriority(EXTI15_10_IRQn, 5);
   NVIC_EnableIRQ(EXTI15_10_IRQn);
 
@@ -274,7 +275,6 @@ void App_MinuteImpulse()
 // STANDBY mode continues from RESET vector and RAM is erased
 void APP_SetStopMode()
 {
-  /* Wichtig! Löschen der Pending IRQ Flags */
   EXTI->PR = 0xFFFFFFFF;
   PWR_ClearFlag(PWR_FLAG_WU);
   APP_SYSTICK_ISR_OFF;
@@ -325,8 +325,8 @@ void EXTI15_10_IRQHandler(void)
   // EXTI line interrupt detected
   if (EXTI->PR & SUPPLY_PIN)
   {
-    EXTI->PR = SUPPLY_PIN; // Clear interrupt flag
-    EXTI->IMR &= ~SUPPLY_PIN;
+    EXTI->PR = SUPPLY_PIN;    // reset int pending bit
+    EXTI->IMR &= ~SUPPLY_PIN; // Clear interrupt flag
 
     // disable wakeup
     RTCF1_SetWakeUp(0);

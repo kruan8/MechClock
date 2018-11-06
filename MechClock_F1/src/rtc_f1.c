@@ -79,7 +79,6 @@ void RTCF1_SetWakeUp(uint16_t nInterval_s)
   nInterval_s--;
 
   EXTI_InitTypeDef    EXTI_InitStructure;
-  NVIC_InitTypeDef    NVIC_InitStructure;
 
   /* EXTI configuration */
   EXTI_ClearITPendingBit(EXTI_Line17);
@@ -89,7 +88,7 @@ void RTCF1_SetWakeUp(uint16_t nInterval_s)
   EXTI_InitStructure.EXTI_LineCmd = ENABLE;
   EXTI_Init(&EXTI_InitStructure);
 
-  /* Alarmperiode setzen */
+  /* ALARM interval */
   PWR_BackupAccessCmd(ENABLE);
   RTC_WaitForLastTask();
   uint32_t cnt = RTC_GetCounter();
@@ -97,7 +96,7 @@ void RTCF1_SetWakeUp(uint16_t nInterval_s)
   RTC_SetAlarm(cnt + nInterval_s);   // sleeptime
   RTC_WaitForLastTask();
 
-  /* Int zulassen */
+  /* Enable INT from Alarm */
   NVIC_SetPriority(RTCAlarm_IRQn, 13);
   NVIC_EnableIRQ(RTCAlarm_IRQn);
   RTC_ITConfig(RTC_IT_ALR, ENABLE);
