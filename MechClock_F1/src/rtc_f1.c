@@ -68,17 +68,24 @@ void RTCF1_Init(void)
 /// nInterval_s = 0 zakaze preruseni
 void RTCF1_SetWakeUp(uint16_t nInterval_s)
 {
+  EXTI_InitTypeDef    EXTI_InitStructure;
+
   if (nInterval_s == 0)
   {
     RTC_ITConfig(RTC_IT_ALR, DISABLE);
+
+    EXTI_ClearITPendingBit(EXTI_Line17);
+    EXTI_InitStructure.EXTI_Line = EXTI_Line17;
+    EXTI_InitStructure.EXTI_Mode = EXTI_Mode_Interrupt;
+    EXTI_InitStructure.EXTI_LineCmd = DISABLE;
+    EXTI_Init(&EXTI_InitStructure);
+
     return;
   }
 
   // INT vyvolano na konci cyklu, kdy hodnota RTC-ALARM je shodna
   // pri nacitani RTC_CNT je uz hodnota o 1 vyssi
   nInterval_s--;
-
-  EXTI_InitTypeDef    EXTI_InitStructure;
 
   /* EXTI configuration */
   EXTI_ClearITPendingBit(EXTI_Line17);
@@ -249,22 +256,18 @@ void RTC_IRQHandler(void)
 
 void RTCAlarm_IRQHandler ()
 {
-  if (RTC_GetITStatus(RTC_IT_ALR) != RESET)
-  {
-    PWR_BackupAccessCmd(ENABLE);
+  PWR_BackupAccessCmd(ENABLE);
 
-    RTC_WaitForSynchro();
-    RTC_WaitForLastTask();
-    uint32_t val = RTC_GetCounter();
-    RTC_WaitForLastTask();
-    RTC_SetAlarm(val + g_nAlarmInterval);
-    RTC_WaitForLastTask();
-    RTC_ClearITPendingBit(RTC_IT_ALR);
-    PWR_BackupAccessCmd(DISABLE);
+  RTC_WaitForSynchro();
+  RTC_WaitForLastTask();
+  uint32_t val = RTC_GetCounter();
+  RTC_WaitForLastTask();
+  RTC_SetAlarm(val + g_nAlarmInterval);
+  RTC_WaitForLastTask();
+  RTC_ClearITPendingBit(RTC_IT_ALR);
+  PWR_BackupAccessCmd(DISABLE);
 
-    EXTI_ClearITPendingBit(EXTI_Line17);   // Remove LINE interrupt flag bit
-  }
-
+  EXTI_ClearITPendingBit(EXTI_Line17);   // Remove LINE interrupt flag bit
 }
 
 void RTCF1_Test(void)

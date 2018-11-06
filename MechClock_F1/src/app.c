@@ -86,7 +86,8 @@
 #define APP_KEY_MIN            1 << 1      // button MIN mask
 #define APP_KEY_DEBOUNCING     20
 
-#define APP_SUPPLY_DEBOUNCING    100
+#define APP_SUPPLY_DEBOUNCING     10
+#define APP_EXEC_TIMER           100
 
 typedef enum
 {
@@ -101,6 +102,9 @@ uint32_t g_nImpulseStack = 0;         // zasobnik impulsu (nastaveni, BAT mode)
 
 uint8_t  g_nKey;                      // stiknute tlacitko
 uint8_t  g_nSupplyDeb = 0;            // debouncer napajeni
+
+uint32_t g_nExecTimer = 0;
+bool     g_bExecFlag = true;
 
 void App_Init(void)
 {
@@ -177,6 +181,13 @@ void App_Exec(void)
     return;
   }
 
+  if (!g_bExecFlag)
+  {
+    return;
+  }
+
+  g_bExecFlag = false;
+
   // pokud je ztrata napajeni, prejit do BAT modu
   if (!(SUPPLY_PORT->IDR & SUPPLY_PIN))
   {
@@ -198,10 +209,10 @@ void App_Exec(void)
 
   // cisteni zasobniku impulsu
   // pokud neni impuls v zaspobniku, reagujeme na tlacitka
-  if (g_nImpulseStack)
+  if (g_nImpulseStack && g_nSupplyDeb == 0)
   {
-    App_MinuteImpulse();
     g_nImpulseStack--;
+    App_MinuteImpulse();
   }
   else
   {
@@ -222,10 +233,15 @@ void App_Exec(void)
   if (RTC->CRL & RTC_CRL_SECF)
   {
     // clear SEC flag
-    while ((RTC->CRL & RTC_FLAG_RTOFF) == RESET);
+//    while ((RTC->CRL & RTC_FLAG_RTOFF) == RESET);
     RTC->CRL &= ~RTC_CRL_SECF;
 
+    LED_ON;
+    BOARD_LED_ON;
     g_nSeconds++;
+    Timer_Delay_ms(50);
+    LED_OFF;
+    BOARD_LED_OFF;
     if (g_nSeconds >= 60)
     {
       g_nSeconds = 0;
@@ -256,9 +272,7 @@ void App_MinuteImpulse()
 
   // impuls do civky + LED bliknuti
   IMPULSE_ON;
-  LED_ON;
   Timer_Delay_ms(APP_IMPULSE_LENGTH_MS);
-  LED_OFF;
   IMPULSE_OFF;
 
   g_bAnchorPosition = !g_bAnchorPosition;
@@ -318,6 +332,14 @@ void App_SystickCallbackINT(void)
   }
 
   nLastKeys = nKeys;
+
+  // exec timer
+  g_nExecTimer++;
+  if (g_nExecTimer >= APP_EXEC_TIMER)
+  {
+    g_nExecTimer = 0;
+    g_bExecFlag = true;
+  }
 }
 
 void EXTI15_10_IRQHandler(void)
