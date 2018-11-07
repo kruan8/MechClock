@@ -70,30 +70,28 @@ void RTCF1_SetWakeUp(uint16_t nInterval_s)
 {
   EXTI_InitTypeDef    EXTI_InitStructure;
 
-  if (nInterval_s == 0)
-  {
-    RTC_ITConfig(RTC_IT_ALR, DISABLE);
-
-    EXTI_ClearITPendingBit(EXTI_Line17);
-    EXTI_InitStructure.EXTI_Line = EXTI_Line17;
-    EXTI_InitStructure.EXTI_Mode = EXTI_Mode_Interrupt;
-    EXTI_InitStructure.EXTI_LineCmd = DISABLE;
-    EXTI_Init(&EXTI_InitStructure);
-
-    return;
-  }
-
-  // INT vyvolano na konci cyklu, kdy hodnota RTC-ALARM je shodna
-  // pri nacitani RTC_CNT je uz hodnota o 1 vyssi
-  nInterval_s--;
-
   /* EXTI configuration */
   EXTI_ClearITPendingBit(EXTI_Line17);
   EXTI_InitStructure.EXTI_Line = EXTI_Line17;
   EXTI_InitStructure.EXTI_Mode = EXTI_Mode_Interrupt;
   EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Rising;
+
+  // disable EXTI
+  if (nInterval_s == 0)
+  {
+    RTC_ITConfig(RTC_IT_ALR, DISABLE);
+    EXTI_InitStructure.EXTI_LineCmd = DISABLE;
+    EXTI_Init(&EXTI_InitStructure);
+    return;
+  }
+
+  // enable EXTI
   EXTI_InitStructure.EXTI_LineCmd = ENABLE;
   EXTI_Init(&EXTI_InitStructure);
+
+  // INT vyvolano na konci cyklu, kdy hodnota RTC-ALARM je shodna
+  // pri nacitani RTC_CNT je uz hodnota o 1 vyssi
+  nInterval_s--;
 
   /* ALARM interval */
   PWR_BackupAccessCmd(ENABLE);
