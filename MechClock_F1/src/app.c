@@ -33,7 +33,7 @@
 
 // externi LED (blink 1s)
 #define LED_PORT           GPIOB
-#define LED_PIN            GPIO_Pin_6
+#define LED_PIN            GPIO_Pin_4
 
 // BLUE LED na kitu
 #define BOARD_LED_PORT     GPIOC
@@ -57,8 +57,8 @@
 #define SUPPLY_PIN_SOURCE  GPIO_PinSource10
 
 // port control
-#define LED_ON             LED_PORT->BRR = LED_PIN
-#define LED_OFF            LED_PORT->BSRR = LED_PIN
+#define LED_OFF            LED_PORT->BRR = LED_PIN
+#define LED_ON             LED_PORT->BSRR = LED_PIN
 
 #define SUPPLY24_ON        SUPPLY24_PORT->BSRR = SUPPLY24_PIN
 #define SUPPLY24_OFF       SUPPLY24_PORT->BRR = SUPPLY24_PIN
@@ -153,6 +153,7 @@ void App_Init(void)
   IMPULSE_OFF;
 
   BOARD_LED_OFF;
+  LED_OFF;
 
   RTCF1_Init();
   Timer_SetSysTickCallback(App_SystickCallbackINT);
@@ -177,8 +178,12 @@ void App_Exec(void)
   if (g_eMode == mode_bat)
   {
     APP_SetStopMode();
-    g_nImpulseStack++;
-    return;
+    if (g_eMode == mode_bat)  // moznost zmeny modu v EXTI
+    {
+      g_nImpulseStack++;
+      RTCF1_SetWakeUp(APP_WEAKUP_BAT_S);  // nastavit minutu
+      return;
+    }
   }
 
   if (!g_bExecFlag)
@@ -197,7 +202,7 @@ void App_Exec(void)
     {
       g_nSupplyDeb = 0;
       g_eMode = mode_bat;
-      RTCF1_SetWakeUp(APP_WEAKUP_BAT_S - g_nSeconds);
+      RTCF1_SetWakeUp(APP_WEAKUP_BAT_S - g_nSeconds);  // zbytek do minuty
       EXTI->IMR |= SUPPLY_PIN;  // INT enable
       return;
     }

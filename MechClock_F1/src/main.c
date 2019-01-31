@@ -18,6 +18,11 @@ int main(void)
   RCC_ClocksTypeDef clock;
   RCC_GetClocksFreq(&clock);
 
+  // premapovani JTAG na GPIO
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO, ENABLE);
+  AFIO->MAPR &= ~AFIO_MAPR_SWJ_CFG;
+  AFIO->MAPR |= AFIO_MAPR_SWJ_CFG_JTAGDISABLE;
+
   App_Init();
 
 //  RTCF1_Test();
